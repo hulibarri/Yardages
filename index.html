@@ -89,6 +89,16 @@
   .pin-banner{display:none;background:var(--card2);border:1px solid var(--line);color:var(--muted);
     font-size:13px;border-radius:10px;padding:6px 10px;margin:-4px 0 12px;text-align:center}
   .pinned .pin-banner{display:block}
+  .altbar{display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--line);
+    border-radius:14px;padding:10px 12px;margin:0 0 12px}
+  .altbar .info{flex:1;font-size:14px;color:var(--muted);line-height:1.3}
+  .altbar .info b{color:var(--text);font-size:16px}
+  .altbar.on{border-color:var(--accent2)}
+  .altbar.on .info b.pct{color:var(--accent2)}
+  .club .base{font-size:13px;color:var(--muted);margin-top:4px;font-variant-numeric:tabular-nums}
+  .alt-on .club .full:not(.empty){color:var(--accent2)}
+  .setrow{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .setrow label{font-size:12px;color:var(--muted);font-weight:600;display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px}
   .soon{text-align:center;color:var(--muted);padding:60px 10px;font-size:18px}
 </style>
 </head>
@@ -119,6 +129,11 @@
     <button class="iconbtn" onclick="go('edit')">Edit</button>
   </div>
   <div class="pin-banner">📌 Pinned — the app opens right here</div>
+  <div class="altbar" id="altbar">
+    <div class="info" id="altInfo"></div>
+    <button class="iconbtn" id="altRefresh" onclick="updateAltitude()" aria-label="Refresh location">↻</button>
+    <button class="iconbtn" id="altToggle" onclick="toggleAlt()">Altitude</button>
+  </div>
   <div class="grid" id="grid"></div>
 </section>
 
@@ -136,6 +151,18 @@
     <button class="btn" onclick="sortByDistance()">Sort by distance</button>
     <button class="btn primary full" onclick="saveNow(true); go('yardages')">Save &amp; view yardages</button>
   </div>
+
+  <div class="section-label">Altitude</div>
+  <div class="setrow">
+    <div><label>My yardages are from (ft)</label>
+      <input id="homeFt" inputmode="numeric" pattern="[0-9]*" placeholder="e.g. 500" oninput="setAlt('homeFt',this.value)"></div>
+    <div><label>% farther per 1,000 ft</label>
+      <input id="pctIn" inputmode="decimal" placeholder="2" oninput="setAlt('pct',this.value)"></div>
+  </div>
+  <div class="actions" style="margin-top:8px">
+    <button class="btn full" onclick="setHomeFromLocation()">📍 Use where I am now as my home altitude</button>
+  </div>
+  <p class="hint">Enter the elevation where you hit your normal yardages (your home course). When Altitude is on, every number adjusts for the elevation where you're standing. 2% per 1,000 ft is the usual rule of thumb. Change it if you find your ball goes farther or shorter than that.</p>
 
   <div class="section-label">Backup</div>
   <div class="actions">
@@ -169,13 +196,14 @@
 <div class="toast" id="toast"></div>
 
 <script>
-const APP_VERSION = '1.0';
+const APP_VERSION = '1.1';
 const KEY = 'myGolf.v1';
 
 const DEFAULT_CLUBS = [
   'Driver','3 Wood','5 Wood','4 Iron','5 Iron','6 Iron','7 Iron','8 Iron','9 Iron','PW','52°','54°','58°'
 ].map(n => ({ id: uid(), name: n, full: '', tq: '', half: '' }));
 
+const DEFAULT_ALT = { on:false, homeFt:'', pct:'2', curFt:null, at:0 };
 let state = load();
 
 function uid(){ return Math.random().toString(36).slice(2,10); }
@@ -185,10 +213,10 @@ function load(){
     const raw = localStorage.getItem(KEY);
     if(raw){
       const s = JSON.parse(raw);
-      if(Array.isArray(s.clubs)) return { pinned:false, theme:'dark', ...s };
+      if(Array.isArray(s.clubs)) return { pinned:false, theme:'dark', ...s, alt: { ...DEFAULT_ALT, ...(s.alt||{}) } };
     }
   }catch(e){}
-  return { clubs: DEFAULT_CLUBS, pinned:false, theme:'dark' };
+  return { clubs: DEFAULT_CLUBS, pinned:false, theme:'dark', alt: { ...DEFAULT_ALT } };
 }
 
 function saveNow(showToast){
@@ -241,7 +269,94 @@ function applyTheme(){
 /* ---------- Yardage display ---------- */
 function esc(s){ return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
+/* ---------- Altitude ---------- */
+function altFactor(){
+  const a = state.alt;
+  if(!a.on || a.curFt == null) return 1;
+  const home = parseFloat(a.homeFt) || 0;
+  const pct = parseFloat(a.pct); const p = isNaN(pct) ? 2 : pct;
+  return 1 + (p/100) * ((a.curFt - home) / 1000);
+}
+function adj(v){
+  if(!v) return v;
+  return String(Math.round(parseInt(v) * altFactor()));
+}
+function fmtFt(n){ return Math.round(n).toLocaleString() + ' ft'; }
+
+function getElevationFt(){
+  return new Promise((resolve, reject) => {
+    if(!navigator.geolocation) return reject('Location not supported');
+    navigator.geolocation.getCurrentPosition(async pos => {
+      const { latitude, longitude, altitude } = pos.coords;
+      try{
+        // Map elevation of the ground where you're standing (more accurate than phone GPS altitude)
+        const r = await fetch(`https://api.open-meteo.com/v1/elevation?latitude=${latitude}&longitude=${longitude}`);
+        const j = await r.json();
+        if(j && j.elevation && j.elevation[0] != null) return resolve(j.elevation[0] * 3.28084);
+      }catch(e){}
+      if(altitude != null) return resolve(altitude * 3.28084); // fallback: phone GPS
+      reject('Could not get elevation');
+    }, err => reject(err.code === 1 ? 'Location permission denied' : 'Could not get location'),
+    { enableHighAccuracy:true, timeout:15000, maximumAge:60000 });
+  });
+}
+
+async function updateAltitude(){
+  const btn = document.getElementById('altRefresh');
+  btn.textContent = '…';
+  try{
+    state.alt.curFt = await getElevationFt();
+    state.alt.at = Date.now();
+    saveNow(false);
+    toast('Elevation: ' + fmtFt(state.alt.curFt));
+  }catch(e){ toast(String(e)); }
+  btn.textContent = '↻';
+  renderGrid();
+}
+
+function toggleAlt(){
+  state.alt.on = !state.alt.on;
+  saveNow(false);
+  if(state.alt.on && (state.alt.curFt == null || Date.now() - state.alt.at > 30*60*1000)) updateAltitude();
+  renderGrid();
+}
+
+function setAlt(field, val){
+  state.alt[field] = val.replace(field === 'pct' ? /[^0-9.]/g : /[^0-9]/g, '');
+  saveNow(false);
+}
+
+async function setHomeFromLocation(){
+  toast('Finding your elevation…');
+  try{
+    const ft = await getElevationFt();
+    state.alt.homeFt = String(Math.round(ft));
+    document.getElementById('homeFt').value = state.alt.homeFt;
+    saveNow(false);
+    toast('Home altitude set: ' + fmtFt(ft));
+  }catch(e){ toast(String(e)); }
+}
+
+function renderAltBar(){
+  const a = state.alt, bar = document.getElementById('altbar');
+  bar.classList.toggle('on', a.on);
+  document.getElementById('yardages').classList.toggle('alt-on', a.on && a.curFt != null);
+  const t = document.getElementById('altToggle');
+  t.classList.toggle('on', a.on);
+  t.textContent = a.on ? 'Alt ON' : 'Alt OFF';
+  document.getElementById('altRefresh').style.display = a.on ? '' : 'none';
+  const info = document.getElementById('altInfo');
+  if(!a.on){ info.innerHTML = 'Altitude adjust is off<br>Showing your normal yardages'; return; }
+  if(a.curFt == null){ info.innerHTML = 'Getting your location…'; return; }
+  const f = altFactor(), pct = (f - 1) * 100;
+  const sign = pct >= 0 ? '+' : '−';
+  info.innerHTML = `Here: <b>${fmtFt(a.curFt)}</b> · <b class="pct">${sign}${Math.abs(pct).toFixed(1)}%</b><br>` +
+    (a.homeFt ? `vs home ${fmtFt(+a.homeFt)}` : `Set your home altitude in Edit`);
+}
+
 function renderGrid(){
+  renderAltBar();
+  const adjusting = state.alt.on && state.alt.curFt != null && altFactor() !== 1;
   const g = document.getElementById('grid');
   const clubs = state.clubs.filter(c => c.name.trim() || c.full);
   if(!clubs.length){
@@ -251,19 +366,22 @@ function renderGrid(){
   g.innerHTML = clubs.map(c => {
     const hasPartial = c.tq || c.half;
     const full = c.full
-      ? `<div class="full">${esc(c.full)}<small>yds</small></div>`
+      ? `<div class="full">${esc(adj(c.full))}<small>yds</small></div>`
       : `<div class="full empty">—</div>`;
+    const base = (adjusting && c.full) ? `<div class="base">normal ${esc(c.full)}</div>` : '';
     const partials = hasPartial ? `<div class="partials">
-        ${c.tq ? `<span>¾ <b>${esc(c.tq)}</b></span>` : ''}
-        ${c.half ? `<span>½ <b>${esc(c.half)}</b></span>` : ''}
+        ${c.tq ? `<span>¾ <b>${esc(adj(c.tq))}</b></span>` : ''}
+        ${c.half ? `<span>½ <b>${esc(adj(c.half))}</b></span>` : ''}
       </div>` : '';
     return `<div class="club ${hasPartial ? 'wedge' : ''}">
-      <div class="name">${esc(c.name || 'Club')}</div>${full}${partials}</div>`;
+      <div class="name">${esc(c.name || 'Club')}</div>${full}${base}${partials}</div>`;
   }).join('');
 }
 
 /* ---------- Edit ---------- */
 function renderEdit(){
+  document.getElementById('homeFt').value = state.alt.homeFt || '';
+  document.getElementById('pctIn').value = state.alt.pct || '';
   const list = document.getElementById('editList');
   list.innerHTML = state.clubs.map((c, i) => `
     <div class="edit-row" data-id="${c.id}">
@@ -370,6 +488,11 @@ applyPin();
 // Clean the ?v= from the address bar after an update
 if(location.search.includes('v=')) history.replaceState(null, '', location.pathname);
 go(state.pinned ? 'yardages' : 'home');
+// Altitude on? Refresh elevation each time the app opens (you may be at a different course)
+if(state.alt.on) updateAltitude();
+document.addEventListener('visibilitychange', () => {
+  if(!document.hidden && state.alt.on && Date.now() - state.alt.at > 30*60*1000) updateAltitude();
+});
 // Save if the app gets closed mid-edit
 document.addEventListener('visibilitychange', () => { if(document.hidden) saveNow(false); });
 </script>
