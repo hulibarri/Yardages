@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="My Golf">
+<meta name="theme-color" content="#0f1a14">
+<title>My Golf</title>
+<style>
+  :root{
+    --bg:#0f1a14; --card:#18271e; --card2:#20342a; --line:#2c4537;
+    --text:#ffffff; --muted:#9fb8a9; --accent:#4ade80; --accent2:#facc15; --danger:#f87171;
+  }
+  body.light{
+    --bg:#f4f6f3; --card:#ffffff; --card2:#eef2ec; --line:#d3dccf;
+    --text:#0b0f0c; --muted:#4b5b50; --accent:#15803d; --accent2:#a16207; --danger:#b91c1c;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Roboto,sans-serif}
+  body{min-height:100vh;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+  button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
+  .screen{display:none;max-width:720px;margin:0 auto;padding:16px 14px 40px}
+  .screen.active{display:block}
+
+  /* Header */
+  .bar{display:flex;align-items:center;gap:8px;margin-bottom:14px}
+  .bar h1{flex:1;margin:0;font-size:24px;font-weight:800;letter-spacing:-.3px}
+  .iconbtn{min-width:44px;height:44px;border-radius:12px;background:var(--card);
+    border:1px solid var(--line);display:flex;align-items:center;justify-content:center;
+    font-size:15px;font-weight:700;padding:0 12px}
+  .iconbtn.on{background:var(--accent);color:#04120a;border-color:var(--accent)}
+
+  /* Home */
+  .home-title{text-align:center;margin:40px 0 30px}
+  .home-title h1{font-size:34px;margin:0;font-weight:800}
+  .home-title p{color:var(--muted);margin:6px 0 0}
+  .big-choice{display:block;width:100%;padding:34px 20px;margin-bottom:16px;border-radius:22px;
+    background:var(--card);border:1px solid var(--line);text-align:left}
+  .big-choice .t{font-size:30px;font-weight:800}
+  .big-choice .s{color:var(--muted);margin-top:4px;font-size:16px}
+  .big-choice.primary{background:var(--accent);color:#04120a;border-color:var(--accent)}
+  .big-choice.primary .s{color:#0b3a1d}
+
+  /* Yardage cards */
+  .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+  .club{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:12px 14px 14px;
+    display:flex;flex-direction:column;min-height:120px}
+  .club .name{font-size:19px;font-weight:700;color:var(--muted);letter-spacing:.2px}
+  .club .full{font-size:56px;font-weight:800;line-height:1;margin-top:6px;letter-spacing:-1.5px;
+    font-variant-numeric:tabular-nums}
+  .club .full small{font-size:16px;font-weight:600;color:var(--muted);margin-left:3px;letter-spacing:0}
+  .club .full.empty{color:var(--line)}
+  .club .partials{margin-top:auto;padding-top:8px;display:flex;gap:12px;font-size:15px;color:var(--muted);
+    font-variant-numeric:tabular-nums}
+  .club .partials b{color:var(--text);font-weight:700}
+  .club.wedge{background:var(--card2)}
+  .empty-msg{text-align:center;color:var(--muted);padding:40px 10px;font-size:17px}
+
+  /* Edit */
+  .edit-row{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px;margin-bottom:10px}
+  .edit-top{display:flex;gap:8px;align-items:center}
+  .edit-top input.cname{flex:1;font-size:18px;font-weight:700}
+  input{font:inherit;color:var(--text);background:var(--bg);border:1px solid var(--line);
+    border-radius:10px;padding:10px 10px;width:100%;font-size:17px}
+  input:focus{outline:2px solid var(--accent);border-color:transparent}
+  .swings{display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:8px;margin-top:10px}
+  .swings label{font-size:12px;color:var(--muted);font-weight:600;display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px}
+  .swings .fullin input{font-weight:800;font-size:20px}
+  .del{color:var(--danger);font-size:22px;width:44px;height:44px}
+  .moves{display:flex;flex-direction:column}
+  .moves button{height:22px;width:32px;color:var(--muted);font-size:13px}
+  .actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
+  .btn{padding:15px;border-radius:14px;background:var(--card);border:1px solid var(--line);font-weight:700;font-size:16px;text-align:center}
+  .btn.primary{background:var(--accent);color:#04120a;border-color:var(--accent)}
+  .btn.full{grid-column:1/-1}
+  .section-label{color:var(--muted);font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;margin:26px 0 8px}
+  .hint{color:var(--muted);font-size:14px;line-height:1.4;margin:8px 0 0}
+  textarea{width:100%;min-height:90px;font:13px ui-monospace,Menlo,monospace;color:var(--text);
+    background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px;margin-top:8px}
+
+  .toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(20px);
+    background:var(--accent);color:#04120a;font-weight:700;padding:12px 20px;border-radius:999px;opacity:0;
+    transition:.25s;pointer-events:none;z-index:9}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .pin-banner{display:none;background:var(--card2);border:1px solid var(--line);color:var(--muted);
+    font-size:13px;border-radius:10px;padding:6px 10px;margin:-4px 0 12px;text-align:center}
+  .pinned .pin-banner{display:block}
+  .soon{text-align:center;color:var(--muted);padding:60px 10px;font-size:18px}
+</style>
+</head>
+<body>
+
+<!-- HOME -->
+<section class="screen" id="home">
+  <div class="home-title">
+    <h1>⛳ My Golf</h1>
+    <p>Pick one</p>
+  </div>
+  <button class="big-choice primary" onclick="go('yardages')">
+    <div class="t">Yardages</div>
+    <div class="s">My clubs &amp; distances</div>
+  </button>
+  <button class="big-choice" onclick="go('games')">
+    <div class="t">Games</div>
+    <div class="s">Coming soon</div>
+  </button>
+</section>
+
+<!-- YARDAGES VIEW -->
+<section class="screen" id="yardages">
+  <div class="bar">
+    <button class="iconbtn" onclick="go('home')" aria-label="Home">⌂</button>
+    <h1>Yardages</h1>
+    <button class="iconbtn" id="pinBtn" onclick="togglePin()">📌 Pin</button>
+    <button class="iconbtn" onclick="go('edit')">Edit</button>
+  </div>
+  <div class="pin-banner">📌 Pinned — the app opens right here</div>
+  <div class="grid" id="grid"></div>
+</section>
+
+<!-- EDIT -->
+<section class="screen" id="edit">
+  <div class="bar">
+    <button class="iconbtn" onclick="doneEditing()">‹ Back</button>
+    <h1>Edit clubs</h1>
+    <button class="iconbtn on" onclick="saveNow(true)">Save</button>
+  </div>
+  <p class="hint" style="margin:-4px 0 12px">Full swing is the big number. ¾ and ½ are optional — fill them in for your wedges (or any club).</p>
+  <div id="editList"></div>
+  <div class="actions">
+    <button class="btn" onclick="addClub()">+ Add club</button>
+    <button class="btn" onclick="sortByDistance()">Sort by distance</button>
+    <button class="btn primary full" onclick="saveNow(true); go('yardages')">Save &amp; view yardages</button>
+  </div>
+
+  <div class="section-label">Backup</div>
+  <div class="actions">
+    <button class="btn" onclick="exportData()">Copy backup</button>
+    <button class="btn" onclick="toggleImport()">Restore backup</button>
+  </div>
+  <div id="importBox" style="display:none">
+    <textarea id="importText" placeholder="Paste your backup code here"></textarea>
+    <button class="btn primary" style="width:100%;margin-top:8px" onclick="importData()">Restore</button>
+  </div>
+  <p class="hint">Everything saves on this phone automatically. A backup lets you move your yardages to a new phone or browser.</p>
+
+  <div class="section-label">App</div>
+  <div class="actions">
+    <button class="btn" onclick="checkUpdate()">Update app</button>
+    <button class="btn" onclick="toggleTheme()">Light / Dark</button>
+  </div>
+  <p class="hint">“Update app” pulls the newest version from GitHub. Your yardages stay put.</p>
+  <p class="hint" id="ver"></p>
+</section>
+
+<!-- GAMES -->
+<section class="screen" id="games">
+  <div class="bar">
+    <button class="iconbtn" onclick="go('home')" aria-label="Home">⌂</button>
+    <h1>Games</h1>
+  </div>
+  <div class="soon">Games are coming next. 🏌️</div>
+</section>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const APP_VERSION = '1.0';
+const KEY = 'myGolf.v1';
+
+const DEFAULT_CLUBS = [
+  'Driver','3 Wood','5 Wood','4 Iron','5 Iron','6 Iron','7 Iron','8 Iron','9 Iron','PW','52°','54°','58°'
+].map(n => ({ id: uid(), name: n, full: '', tq: '', half: '' }));
+
+let state = load();
+
+function uid(){ return Math.random().toString(36).slice(2,10); }
+
+function load(){
+  try{
+    const raw = localStorage.getItem(KEY);
+    if(raw){
+      const s = JSON.parse(raw);
+      if(Array.isArray(s.clubs)) return { pinned:false, theme:'dark', ...s };
+    }
+  }catch(e){}
+  return { clubs: DEFAULT_CLUBS, pinned:false, theme:'dark' };
+}
+
+function saveNow(showToast){
+  try{
+    localStorage.setItem(KEY, JSON.stringify({ ...state, savedAt: Date.now() }));
+    if(showToast) toast('Saved ✓');
+  }catch(e){ toast('Could not save'); }
+}
+
+function toast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(toast._t); toast._t = setTimeout(()=>t.classList.remove('show'), 1600);
+}
+
+/* ---------- Navigation ---------- */
+function go(id){
+  document.querySelectorAll('.screen').forEach(s => s.classList.toggle('active', s.id === id));
+  if(id === 'yardages') renderGrid();
+  if(id === 'edit') renderEdit();
+  window.scrollTo(0,0);
+}
+
+function doneEditing(){ saveNow(false); go('yardages'); }
+
+/* ---------- Pin ---------- */
+function togglePin(){
+  state.pinned = !state.pinned;
+  saveNow(false);
+  applyPin();
+  toast(state.pinned ? 'Pinned — opens to yardages' : 'Unpinned');
+}
+function applyPin(){
+  const b = document.getElementById('pinBtn');
+  b.classList.toggle('on', state.pinned);
+  b.textContent = state.pinned ? '📌 Pinned' : '📌 Pin';
+  document.getElementById('yardages').classList.toggle('pinned', state.pinned);
+}
+
+/* ---------- Theme ---------- */
+function toggleTheme(){
+  state.theme = state.theme === 'light' ? 'dark' : 'light';
+  applyTheme(); saveNow(false);
+}
+function applyTheme(){
+  document.body.classList.toggle('light', state.theme === 'light');
+  document.querySelector('meta[name=theme-color]').content = state.theme === 'light' ? '#f4f6f3' : '#0f1a14';
+}
+
+/* ---------- Yardage display ---------- */
+function esc(s){ return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+function renderGrid(){
+  const g = document.getElementById('grid');
+  const clubs = state.clubs.filter(c => c.name.trim() || c.full);
+  if(!clubs.length){
+    g.innerHTML = '<div class="empty-msg" style="grid-column:1/-1">No clubs yet.<br>Tap <b>Edit</b> to add your yardages.</div>';
+    return;
+  }
+  g.innerHTML = clubs.map(c => {
+    const hasPartial = c.tq || c.half;
+    const full = c.full
+      ? `<div class="full">${esc(c.full)}<small>yds</small></div>`
+      : `<div class="full empty">—</div>`;
+    const partials = hasPartial ? `<div class="partials">
+        ${c.tq ? `<span>¾ <b>${esc(c.tq)}</b></span>` : ''}
+        ${c.half ? `<span>½ <b>${esc(c.half)}</b></span>` : ''}
+      </div>` : '';
+    return `<div class="club ${hasPartial ? 'wedge' : ''}">
+      <div class="name">${esc(c.name || 'Club')}</div>${full}${partials}</div>`;
+  }).join('');
+}
+
+/* ---------- Edit ---------- */
+function renderEdit(){
+  const list = document.getElementById('editList');
+  list.innerHTML = state.clubs.map((c, i) => `
+    <div class="edit-row" data-id="${c.id}">
+      <div class="edit-top">
+        <div class="moves">
+          <button onclick="move(${i},-1)" aria-label="Move up">▲</button>
+          <button onclick="move(${i},1)" aria-label="Move down">▼</button>
+        </div>
+        <input class="cname" value="${esc(c.name)}" placeholder="Club name" oninput="setField('${c.id}','name',this.value)">
+        <button class="del" onclick="removeClub('${c.id}')" aria-label="Delete">✕</button>
+      </div>
+      <div class="swings">
+        <div class="fullin"><label>Full</label>
+          <input inputmode="numeric" pattern="[0-9]*" value="${esc(c.full)}" placeholder="yds" oninput="setField('${c.id}','full',this.value)"></div>
+        <div><label>¾ swing</label>
+          <input inputmode="numeric" pattern="[0-9]*" value="${esc(c.tq)}" placeholder="—" oninput="setField('${c.id}','tq',this.value)"></div>
+        <div><label>½ swing</label>
+          <input inputmode="numeric" pattern="[0-9]*" value="${esc(c.half)}" placeholder="—" oninput="setField('${c.id}','half',this.value)"></div>
+      </div>
+    </div>`).join('');
+}
+
+function setField(id, field, val){
+  const c = state.clubs.find(x => x.id === id);
+  if(!c) return;
+  c[field] = field === 'name' ? val : val.replace(/[^0-9]/g,'').slice(0,3);
+  saveNow(false); // autosave every change
+}
+
+function addClub(){
+  state.clubs.push({ id: uid(), name:'', full:'', tq:'', half:'' });
+  saveNow(false); renderEdit();
+  const inputs = document.querySelectorAll('#editList .cname');
+  inputs[inputs.length-1].focus();
+}
+
+function removeClub(id){
+  const c = state.clubs.find(x => x.id === id);
+  if(!confirmDelete(c)) return;
+  state.clubs = state.clubs.filter(x => x.id !== id);
+  saveNow(false); renderEdit(); toast('Removed');
+}
+function confirmDelete(c){
+  // Only ask if the club has numbers in it
+  if(!c || (!c.full && !c.tq && !c.half)) return true;
+  return window.confirm(`Delete ${c.name || 'this club'}?`);
+}
+
+function move(i, d){
+  const j = i + d;
+  if(j < 0 || j >= state.clubs.length) return;
+  [state.clubs[i], state.clubs[j]] = [state.clubs[j], state.clubs[i]];
+  saveNow(false); renderEdit();
+}
+
+function sortByDistance(){
+  state.clubs.sort((a,b) => (parseInt(b.full)||-1) - (parseInt(a.full)||-1));
+  saveNow(false); renderEdit(); toast('Sorted longest → shortest');
+}
+
+/* ---------- Backup ---------- */
+function exportData(){
+  const code = btoa(unescape(encodeURIComponent(JSON.stringify({ clubs: state.clubs }))));
+  const done = () => toast('Backup copied — paste it in Notes');
+  if(navigator.clipboard) navigator.clipboard.writeText(code).then(done, () => showCode(code));
+  else showCode(code);
+}
+function showCode(code){
+  document.getElementById('importBox').style.display = 'block';
+  document.getElementById('importText').value = code;
+  toast('Copy the code below');
+}
+function toggleImport(){
+  const b = document.getElementById('importBox');
+  b.style.display = b.style.display === 'none' ? 'block' : 'none';
+}
+function importData(){
+  try{
+    const txt = document.getElementById('importText').value.trim();
+    const data = JSON.parse(decodeURIComponent(escape(atob(txt))));
+    if(!Array.isArray(data.clubs)) throw 0;
+    if(!window.confirm('Replace your current clubs with this backup?')) return;
+    state.clubs = data.clubs.map(c => ({ id: uid(), name: c.name||'', full: c.full||'', tq: c.tq||'', half: c.half||'' }));
+    saveNow(true); renderEdit();
+    document.getElementById('importBox').style.display = 'none';
+  }catch(e){ toast('That backup code didn’t work'); }
+}
+
+/* ---------- Update ---------- */
+async function checkUpdate(){
+  saveNow(false);
+  toast('Updating…');
+  try{
+    if('caches' in window){ const ks = await caches.keys(); await Promise.all(ks.map(k => caches.delete(k))); }
+  }catch(e){}
+  const url = location.pathname + '?v=' + Date.now() + location.hash;
+  setTimeout(() => location.replace(url), 400);
+}
+
+/* ---------- Start ---------- */
+document.getElementById('ver').textContent = 'Version ' + APP_VERSION;
+applyTheme();
+applyPin();
+// Clean the ?v= from the address bar after an update
+if(location.search.includes('v=')) history.replaceState(null, '', location.pathname);
+go(state.pinned ? 'yardages' : 'home');
+// Save if the app gets closed mid-edit
+document.addEventListener('visibilitychange', () => { if(document.hidden) saveNow(false); });
+</script>
+</body>
+</html>
