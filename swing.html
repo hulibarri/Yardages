@@ -54,8 +54,11 @@
   #recBtn{width:72px;height:72px;border-radius:50%;background:var(--danger);border:5px solid #fff;padding:0}
   #recBtn.recording{border-radius:18px;width:60px;height:60px}
   #time{font-variant-numeric:tabular-nums;font-size:13px;color:var(--dim);min-width:92px;text-align:right}
-  input[type=range]{width:100%;accent-color:var(--accent);height:32px}
-  .scrub{padding:0 14px}
+  .scrub{padding:0 22px;height:44px;display:flex;align-items:center;touch-action:none;cursor:pointer}
+  .track{position:relative;flex:1;height:6px;border-radius:3px;background:var(--line)}
+  .fill{position:absolute;left:0;top:0;bottom:0;width:0;border-radius:3px;background:var(--accent)}
+  .thumb{position:absolute;top:50%;left:0;width:24px;height:24px;margin:-12px 0 0 -12px;border-radius:50%;
+    background:#fff;box-shadow:0 1px 6px #0008}
   .center{justify-content:center}
   #toast{position:fixed;left:50%;bottom:calc(30px + env(safe-area-inset-bottom));transform:translateX(-50%);
     background:#000c;padding:10px 16px;border-radius:20px;font-size:14px;pointer-events:none;transition:opacity .3s}
@@ -104,14 +107,16 @@
 
     <!-- Review controls -->
     <div id="reviewControls" class="hidden">
-      <div class="scrub"><input type="range" id="scrub" min="0" max="1" step="0.001" value="0"></div>
+      <div class="scrub" id="scrub"><div class="track"><div class="fill" id="scrubFill"></div><div class="thumb" id="scrubThumb"></div></div></div>
       <div class="bar">
         <button id="backBtn" aria-label="Previous frame">⏮︎</button>
         <button id="playBtn" style="min-width:56px">▶︎</button>
         <button id="fwdBtn" aria-label="Next frame">⏭︎</button>
         <select id="speedSel">
-          <option value="0.1">0.1×</option><option value="0.25" selected>¼×</option>
-          <option value="0.5">½×</option><option value="1">1×</option>
+          <option value="0.1">0.1×</option><option value="0.25">¼×</option>
+          <option value="0.5">½×</option><option value="1" selected>1×</option>
+          <option value="2">2×</option><option value="4">4× (120fps slo-mo)</option>
+          <option value="8">8× (240fps slo-mo)</option>
         </select>
         <span class="grow"></span>
         <span id="time">0.00 / 0.00</span>
@@ -250,8 +255,9 @@
     clearVideoSrc();
     video.style.transform = (isRecording && facing==='user') ? 'scaleX(-1)' : '';
     objectURL = URL.createObjectURL(blob);
+    video.preload = 'auto';
     video.src = objectURL;
-    video.playbackRate = +$('speedSel').value;
+    video.load();
     show('saveVidBtn', isRecording);
     shapes = []; pendingAngle = null;
     setMode('review');
@@ -262,17 +268,37 @@
         video.ontimeupdate = () => { video.ontimeupdate = null; video.currentTime = 0; syncUI(); };
       }
       resize(); syncUI();
-      video.currentTime = 0.001; // show first frame on iOS
+      // iOS Safari won't paint a frame until the video has played once: play muted, pause right away
+      video.muted = true;
+      const p = video.play();
+      const settle = () => { video.pause(); video.playbackRate = +$('speedSel').value; seekTo(0); };
+      if(p && p.then) p.then(settle).catch(() => seekTo(0)); else settle();
     };
   }
 
   // playback
-  $('playBtn').onclick = () => video.paused ? video.play() : video.pause();
+  $('playBtn').onclick = () => {
+    if(!video.paused){ video.pause(); return; }
+    if(video.ended || video.currentTime >= video.duration - 0.05) video.currentTime = 0;
+    video.playbackRate = +$('speedSel').value; video.play();
+  };
   video.onplay = () => { $('playBtn').textContent = '❚❚'; loop(); };
   video.onpause = () => { $('playBtn').textContent = '▶︎'; syncUI(); };
   video.onended = () => { $('playBtn').textContent = '▶︎'; };
-  video.onseeked = syncUI;
-  function step(d){ video.pause(); video.currentTime = Math.max(0, Math.min((video.duration||0), video.currentTime + d)); }
+  // Seeking: only one seek in flight at a time, always land on the latest request
+  let pendingSeek = null, seekBusy = false, seekGuard = null;
+  function seekTo(t){
+    const d = video.duration; if(isFinite(d)) t = Math.max(0, Math.min(d - 0.001, t));
+    pendingSeek = t; if(!seekBusy) doSeek();
+  }
+  function doSeek(){
+    seekBusy = true; const t = pendingSeek; pendingSeek = null;
+    video.currentTime = t; syncUI(t);
+    clearTimeout(seekGuard); seekGuard = setTimeout(() => { seekBusy = false; if(pendingSeek!==null) doSeek(); }, 400);
+  }
+  video.onseeked = () => { clearTimeout(seekGuard); seekBusy = false; if(pendingSeek!==null) doSeek(); else syncUI(); };
+  let lastT = 0;
+  function step(d){ video.pause(); const base = pendingSeek!==null ? pendingSeek : (seekBusy ? lastT : video.currentTime); seekTo(base + d); }
   $('backBtn').onclick = () => step(-FRAME);
   $('fwdBtn').onclick = () => step(FRAME);
   // hold to repeat
@@ -281,13 +307,28 @@
     $(id).addEventListener('pointerdown', () => { h = setTimeout(function rep(){ step(d); h = setTimeout(rep, 70); }, 350); });
     ['pointerup','pointerleave','pointercancel'].forEach(ev => $(id).addEventListener(ev, () => clearTimeout(h)));
   });
-  $('speedSel').onchange = e => video.playbackRate = +e.target.value;
-  $('scrub').oninput = e => { video.pause(); if(isFinite(video.duration)) video.currentTime = +e.target.value * video.duration; };
+  try{ const sv = localStorage.getItem('swingSpeed'); if(sv) $('speedSel').value = sv; }catch(e){}
+  $('speedSel').onchange = e => { video.playbackRate = +e.target.value; try{ localStorage.setItem('swingSpeed', e.target.value); }catch(_){} };
 
-  function syncUI(){
+  // custom scrubber
+  const scrub = $('scrub');
+  function scrubAt(e){
+    const tr = scrub.querySelector('.track').getBoundingClientRect();
+    const f = Math.max(0, Math.min(1, (e.clientX - tr.left) / tr.width));
+    if(isFinite(video.duration)) seekTo(f * video.duration);
+  }
+  scrub.addEventListener('pointerdown', e => { e.preventDefault(); scrub.setPointerCapture(e.pointerId); video.pause(); scrub._down = true; scrubAt(e); });
+  scrub.addEventListener('pointermove', e => { if(scrub._down) scrubAt(e); });
+  ['pointerup','pointercancel'].forEach(ev => scrub.addEventListener(ev, () => scrub._down = false));
+
+  function syncUI(tOverride){
     const d = video.duration;
-    if(isFinite(d) && d>0){ $('scrub').value = video.currentTime / d; }
-    $('time').textContent = `${fmt(video.currentTime)} / ${fmt(d)}`;
+    const t = typeof tOverride === 'number' ? tOverride : video.currentTime;
+    lastT = t;
+    const f = (isFinite(d) && d>0) ? Math.max(0, Math.min(1, t/d)) : 0;
+    $('scrubFill').style.width = (f*100) + '%';
+    $('scrubThumb').style.left = (f*100) + '%';
+    $('time').textContent = `${fmt(t)} / ${fmt(d)}`;
   }
   function loop(){ if(video.paused) return; syncUI(); requestAnimationFrame(loop); }
 
