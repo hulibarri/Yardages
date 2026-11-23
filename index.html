@@ -131,6 +131,13 @@
   .stepper input{flex:1;text-align:center;font-size:26px;font-weight:800;height:52px}
   .stepper .unit{color:var(--muted);font-size:14px;width:30px}
   .stepper.off{opacity:.3;pointer-events:none}
+  .trio{display:grid;grid-template-columns:1fr 1.1fr 1fr;gap:8px}
+  .trio button{height:60px;border-radius:12px;background:var(--bg);border:1px solid var(--line);font-weight:700;font-size:18px}
+  .trio button.sel{background:var(--accent);color:#04120a;border-color:var(--accent)}
+  .trio button.need{border-color:var(--accent2);box-shadow:0 0 0 2px var(--accent2) inset}
+  .trio input{height:60px;text-align:center;font-size:30px;font-weight:800;padding:0}
+  .trio input::placeholder{color:var(--line)}
+  .needside{text-align:center;color:var(--accent2);font-weight:700;font-size:15px;min-height:20px;margin:-2px 0 4px}
   .shotscore{text-align:center;font-size:17px;color:var(--muted);margin:6px 0 10px}
   .shotscore b{color:var(--text);font-size:26px;font-variant-numeric:tabular-nums}
   .navrow{display:grid;grid-template-columns:1fr 2fr;gap:10px}
@@ -309,33 +316,22 @@
 
   <div class="axis">
     <div class="h">Left / Right</div>
-    <div class="seg" id="segLR">
+    <div class="trio" id="rowLR">
       <button data-v="-1" onclick="setDir('lr',-1)">Left</button>
-      <button data-v="0" onclick="setDir('lr',0)">On line</button>
+      <input id="inLR" inputmode="numeric" pattern="[0-9]*" placeholder="0" oninput="typeYds('lr',this.value)">
       <button data-v="1" onclick="setDir('lr',1)">Right</button>
-    </div>
-    <div class="stepper" id="stepLR">
-      <button onclick="bump('lr',-1)">−</button>
-      <input id="inLR" inputmode="numeric" pattern="[0-9]*" oninput="typeYds('lr',this.value)">
-      <button onclick="bump('lr',1)">+</button>
-      <span class="unit">yds</span>
     </div>
   </div>
 
   <div class="axis">
     <div class="h">Short / Long</div>
-    <div class="seg" id="segSL">
+    <div class="trio" id="rowSL">
       <button data-v="-1" onclick="setDir('sl',-1)">Short</button>
-      <button data-v="0" onclick="setDir('sl',0)">Pin high</button>
+      <input id="inSL" inputmode="numeric" pattern="[0-9]*" placeholder="0" oninput="typeYds('sl',this.value)">
       <button data-v="1" onclick="setDir('sl',1)">Long</button>
     </div>
-    <div class="stepper" id="stepSL">
-      <button onclick="bump('sl',-1)">−</button>
-      <input id="inSL" inputmode="numeric" pattern="[0-9]*" oninput="typeYds('sl',this.value)">
-      <button onclick="bump('sl',1)">+</button>
-      <span class="unit">yds</span>
-    </div>
   </div>
+  <div class="needside" id="needSide"></div>
 
   <div class="shotscore">Shot score <b id="shotScore">0.0</b> · Total so far <b id="runTotal">0.0</b></div>
   <div class="navrow">
@@ -379,7 +375,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-const APP_VERSION = '1.6';
+const APP_VERSION = '1.8';
 const KEY = 'myGolf.v1';
 
 const DEFAULT_CLUBS = [
@@ -727,7 +723,7 @@ function renderGames(){
 function suggestClub(t){
   let bestM = null;
   state.clubs.forEach(c => {
-    [['full',''],['tq','¾ '],['half','½ ']].forEach(([k,lab]) => {
+    [['full','Full '],['tq','¾ '],['half','½ ']].forEach(([k,lab]) => {
       if(!c[k]) return;
       const y = parseInt(adj(c[k]));
       const d = Math.abs(y - t);
@@ -746,15 +742,14 @@ function renderPlay(){
   document.getElementById('shotLbl').textContent = `Shot ${i+1} of ${SHOTS}`;
   document.getElementById('targetNum').innerHTML = `${t}<small>yds</small>`;
   const s = suggestClub(t);
-  document.getElementById('clubSug').innerHTML = s ? `Closest club: <b>${esc(s.txt)}</b> (${s.y})` : '';
+  document.getElementById('clubSug').innerHTML = s ? `Closest club: <b>${esc(s.txt)}</b> (${s.y} YDS)` : '';
   ['lr','sl'].forEach(ax => {
-    const v = sh[ax], dir = Math.sign(v);
-    document.querySelectorAll(`#seg${ax.toUpperCase()} button`).forEach(b => b.classList.toggle('sel', +b.dataset.v === dir));
-    document.getElementById(`step${ax.toUpperCase()}`).classList.toggle('off', dir === 0);
-    const inp = document.getElementById(`in${ax.toUpperCase()}`);
-    if(document.activeElement !== inp) inp.value = dir === 0 ? '' : Math.abs(v);
-    inp.placeholder = dir === 0 ? '0' : '';
+    const d = axSide(sh, ax), m = axMag(sh, ax);
+    document.querySelectorAll('#row'+ax.toUpperCase()+' button').forEach(b => b.classList.toggle('sel', +b.dataset.v === d));
+    const inp = document.getElementById('in'+ax.toUpperCase());
+    if(document.activeElement !== inp) inp.value = m ? m : '';
   });
+  markNeeds.shown = false; markNeeds();
   updateScoreLine();
   document.getElementById('nextBtn').textContent = i === SHOTS-1 ? 'Finish round ✓' : 'Next shot ›';
 }
@@ -765,30 +760,39 @@ function updateScoreLine(){
   document.getElementById('runTotal').textContent = f1(total);
 }
 
+// Each axis keeps a side (-1 / 1, or 0 = none picked) and a yards number
+function axSide(sh, ax){ return sh[ax+'d'] != null ? sh[ax+'d'] : Math.sign(sh[ax]); }
+function axMag(sh, ax){ return sh[ax+'m'] != null ? sh[ax+'m'] : Math.abs(sh[ax]); }
+function syncAx(sh, ax){ const d = axSide(sh,ax), m = axMag(sh,ax); sh[ax] = (d || 1) * m; }
+
 function setDir(ax, dir){
   const sh = state.current.shots[state.current.idx];
-  const mag = Math.abs(sh[ax]);
-  sh[ax] = dir === 0 ? 0 : dir * (mag || 1);   // picking a side starts at 1 yd
-  saveNow(false); renderPlay();
-  if(dir !== 0){ const inp = document.getElementById(`in${ax.toUpperCase()}`); inp.select && inp.select(); }
-}
-function bump(ax, d){
-  const sh = state.current.shots[state.current.idx];
-  const dir = Math.sign(sh[ax]) || 1;
-  const mag = Math.max(0, Math.abs(sh[ax]) + d);
-  sh[ax] = dir * mag;
-  saveNow(false); renderPlay();
+  sh[ax+'m'] = axMag(sh, ax);
+  sh[ax+'d'] = axSide(sh, ax) === dir ? 0 : dir;     // tap again to un-pick
+  syncAx(sh, ax); saveNow(false); renderPlay();
+  if(sh[ax+'d'] && !sh[ax+'m']) document.getElementById('in'+ax.toUpperCase()).focus();
 }
 function typeYds(ax, val){
   const sh = state.current.shots[state.current.idx];
-  const dir = Math.sign(sh[ax]) || 1;
-  const n = Math.min(999, parseInt(val.replace(/[^0-9]/g,'')) || 0);
-  sh[ax] = dir * n;
-  saveNow(false); updateScoreLine();
+  sh[ax+'d'] = axSide(sh, ax);
+  sh[ax+'m'] = Math.min(999, parseInt(val.replace(/[^0-9]/g,'')) || 0);
+  syncAx(sh, ax); saveNow(false); updateScoreLine(); markNeeds();
+}
+function missingSide(sh){
+  return ['lr','sl'].filter(ax => axMag(sh,ax) > 0 && !axSide(sh,ax));
+}
+function markNeeds(show){
+  const sh = state.current.shots[state.current.idx], miss = missingSide(sh);
+  ['lr','sl'].forEach(ax => document.querySelectorAll('#row'+ax.toUpperCase()+' button')
+    .forEach(b => b.classList.toggle('need', miss.includes(ax) && !!(show || markNeeds.shown))));
+  document.getElementById('needSide').textContent = (show || markNeeds.shown) && miss.length
+    ? 'Pick ' + miss.map(a => a==='lr' ? 'Left or Right' : 'Short or Long').join(' and ') : '';
+  if(!miss.length) markNeeds.shown = false;
 }
 
 function nextShot(){
   const cur = state.current;
+  if(missingSide(cur.shots[cur.idx]).length){ markNeeds.shown = true; markNeeds(true); return; }
   if(cur.idx < SHOTS-1){ cur.idx++; saveNow(false); renderPlay(); window.scrollTo(0,0); return; }
   // finish
   const round = { id: cur.id, cat: cur.cat, date: Date.now(), targets: cur.targets,
