@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0f1a14">
+<title>Camera · Rat Lab Golf</title>
+<style>
+  :root{
+    --bg:#0f1a14; --panel:#17261d; --line:#24372b; --text:#eef3ef; --dim:#8fa597;
+    --accent:#4ade80; --danger:#ff6b5e;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;overscroll-behavior:none}
+  body{display:flex;flex-direction:column;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+  header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px}
+  header h1{font-size:18px;margin:0;letter-spacing:.3px}
+  header h1 span{color:var(--accent)}
+  button{font:inherit;color:inherit;background:var(--panel);border:1px solid var(--line);
+    border-radius:12px;padding:10px 12px;cursor:pointer;touch-action:manipulation}
+  button:active{transform:scale(.97)}
+  button.on{background:var(--accent);color:#0b140e;border-color:var(--accent);font-weight:600}
+  .hidden{display:none!important}
+  main{flex:1;display:flex;flex-direction:column;min-height:0}
+
+  /* Home */
+  #home{flex:1;display:flex;flex-direction:column;justify-content:center;gap:14px;padding:24px}
+  #home p{color:var(--dim);text-align:center;margin:0 0 10px;line-height:1.4}
+  .big{font-size:18px;padding:20px;border-radius:16px;font-weight:600}
+  .big.primary{background:var(--accent);color:#0b140e;border:none}
+
+  /* Stage */
+  #stage{position:relative;flex:1;min-height:0;background:#000;overflow:hidden}
+  #stage video,#stage canvas{position:absolute;inset:0;width:100%;height:100%}
+  #stage video{object-fit:contain}
+  #stage canvas{touch-action:none}
+  #countdown{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    font-size:110px;font-weight:800;color:#fff;text-shadow:0 4px 30px #000;pointer-events:none}
+  #recDot{position:absolute;top:12px;left:12px;background:var(--danger);color:#fff;font-weight:700;
+    font-size:13px;padding:5px 10px;border-radius:20px}
+
+  /* Bars */
+  .bar{display:flex;gap:8px;padding:8px 10px;align-items:center;overflow-x:auto;scrollbar-width:none}
+  .bar::-webkit-scrollbar{display:none}
+  .bar button{flex:0 0 auto}
+  .grow{flex:1}
+  .sep{width:1px;align-self:stretch;background:var(--line);flex:0 0 1px}
+  .swatch{width:30px;height:30px;border-radius:50%;padding:0;border:2px solid transparent;flex:0 0 auto}
+  .swatch.on{border-color:#fff;background-clip:padding-box}
+  select{font:inherit;color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px}
+  label.opt{display:flex;flex-direction:column;font-size:11px;color:var(--dim);gap:3px}
+  #recBtn{width:72px;height:72px;border-radius:50%;background:var(--danger);border:5px solid #fff;padding:0}
+  #recBtn.recording{border-radius:18px;width:60px;height:60px}
+  #time{font-variant-numeric:tabular-nums;font-size:13px;color:var(--dim);min-width:92px;text-align:right}
+  input[type=range]{width:100%;accent-color:var(--accent);height:32px}
+  .scrub{padding:0 14px}
+  .center{justify-content:center}
+  #toast{position:fixed;left:50%;bottom:calc(30px + env(safe-area-inset-bottom));transform:translateX(-50%);
+    background:#000c;padding:10px 16px;border-radius:20px;font-size:14px;pointer-events:none;transition:opacity .3s}
+</style>
+</head>
+<body>
+<header>
+  <div style="display:flex;align-items:center;gap:10px"><button onclick="location.href='index.html'" aria-label="Home">⌂</button><h1>Camera</h1></div>
+  <button id="newBtn" class="hidden">New</button>
+</header>
+
+<main>
+  <!-- Home -->
+  <section id="home">
+    <p>Film your swing, scrub it frame by frame, and draw on it.<br>Nothing is saved unless you choose to.</p>
+    <button class="big primary" id="startCam">🎥 Record swing</button>
+    <button class="big" id="pickFile">📁 Open a video</button>
+    <input type="file" id="fileInput" accept="video/*" class="hidden">
+  </section>
+
+  <!-- Stage (camera + review share it) -->
+  <section id="stageWrap" class="hidden" style="flex:1;display:flex;flex-direction:column;min-height:0">
+    <div id="stage">
+      <video id="video" playsinline muted webkit-playsinline></video>
+      <canvas id="canvas"></canvas>
+      <div id="countdown" class="hidden"></div>
+      <div id="recDot" class="hidden">● REC</div>
+    </div>
+
+    <!-- Camera controls -->
+    <div id="camControls">
+      <div class="bar center" style="gap:14px;padding-top:12px">
+        <label class="opt">Delay
+          <select id="delaySel"><option value="0">None</option><option value="3">3 s</option><option value="5" selected>5 s</option><option value="10">10 s</option></select>
+        </label>
+        <button id="recBtn" aria-label="Record"></button>
+        <label class="opt">Length
+          <select id="lenSel"><option value="0">Tap stop</option><option value="5">5 s</option><option value="8" selected>8 s</option><option value="15">15 s</option></select>
+        </label>
+      </div>
+      <div class="bar center">
+        <button id="flipBtn">🔄 Flip camera</button>
+        <button id="cancelCam">Cancel</button>
+      </div>
+    </div>
+
+    <!-- Review controls -->
+    <div id="reviewControls" class="hidden">
+      <div class="scrub"><input type="range" id="scrub" min="0" max="1" step="0.001" value="0"></div>
+      <div class="bar">
+        <button id="backBtn" aria-label="Previous frame">⏮︎</button>
+        <button id="playBtn" style="min-width:56px">▶︎</button>
+        <button id="fwdBtn" aria-label="Next frame">⏭︎</button>
+        <select id="speedSel">
+          <option value="0.1">0.1×</option><option value="0.25" selected>¼×</option>
+          <option value="0.5">½×</option><option value="1">1×</option>
+        </select>
+        <span class="grow"></span>
+        <span id="time">0.00 / 0.00</span>
+      </div>
+      <div class="bar" id="tools">
+        <button data-tool="line" class="on">📏 Line</button>
+        <button data-tool="angle">📐 Angle</button>
+        <button data-tool="circle">⭕ Circle</button>
+        <button data-tool="free">✏️ Draw</button>
+        <span class="sep"></span>
+        <button class="swatch on" data-color="#ffe14d" style="background:#ffe14d"></button>
+        <button class="swatch" data-color="#ff4d4d" style="background:#ff4d4d"></button>
+        <button class="swatch" data-color="#4dd2ff" style="background:#4dd2ff"></button>
+        <button class="swatch" data-color="#ffffff" style="background:#ffffff"></button>
+        <span class="sep"></span>
+        <button id="undoBtn">↶ Undo</button>
+        <button id="clearBtn">Clear</button>
+      </div>
+      <div class="bar">
+        <button id="snapBtn">📸 Save frame</button>
+        <button id="saveVidBtn" class="hidden">💾 Save video</button>
+        <span class="grow"></span>
+        <button id="gridBtn">Grid</button>
+      </div>
+    </div>
+  </section>
+</main>
+<div id="toast" style="opacity:0"></div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const video = $('video'), canvas = $('canvas'), ctx = canvas.getContext('2d');
+  const FRAME = 1/30;
+
+  let stream = null, facing = 'environment', recorder = null, chunks = [];
+  let recordedBlob = null, objectURL = null, mode = 'home';
+  let shapes = [], tool = 'line', color = '#ffe14d', showGrid = false;
+  let drag = null;          // {shape, idx} while dragging a point
+  let pendingAngle = null;  // angle waiting for its 2nd arm
+  let autoStopTimer = null, countdownTimer = null;
+
+  // ---------- helpers ----------
+  function toast(msg){ const t=$('toast'); t.textContent=msg; t.style.opacity=1;
+    clearTimeout(t._h); t._h=setTimeout(()=>t.style.opacity=0,1800); }
+  function show(id, on){ $(id).classList.toggle('hidden', !on); }
+  function fmt(t){ return isFinite(t) ? t.toFixed(2) : '0.00'; }
+
+  function setMode(m){
+    mode = m;
+    show('home', m==='home');
+    show('stageWrap', m!=='home');
+    show('camControls', m==='camera');
+    show('reviewControls', m==='review');
+    show('newBtn', m==='review');
+    canvas.style.pointerEvents = m==='review' ? 'auto' : 'none';
+    resize();
+  }
+
+  // ---------- camera ----------
+  async function startCamera(){
+    stopStream();
+    try{
+      stream = await navigator.mediaDevices.getUserMedia({
+        video:{ facingMode:facing, width:{ideal:1920}, height:{ideal:1080}, frameRate:{ideal:60} },
+        audio:false
+      });
+    }catch(e){
+      toast('Camera blocked — check permissions');
+      setMode('home'); return;
+    }
+    clearVideoSrc();
+    video.srcObject = stream;
+    video.style.transform = facing==='user' ? 'scaleX(-1)' : '';
+    await video.play().catch(()=>{});
+    shapes = []; setMode('camera');
+  }
+  function stopStream(){ if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; } }
+
+  function pickMime(){
+    const opts = ['video/mp4','video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm'];
+    return opts.find(m => window.MediaRecorder && MediaRecorder.isTypeSupported(m)) || '';
+  }
+
+  function beginRecording(){
+    const mime = pickMime();
+    try{ recorder = new MediaRecorder(stream, mime ? {mimeType:mime, videoBitsPerSecond:8_000_000} : undefined); }
+    catch(e){ toast('Recording not supported here — use “Open a video”'); return; }
+    chunks = [];
+    recorder.ondataavailable = e => e.data.size && chunks.push(e.data);
+    recorder.onstop = () => {
+      recordedBlob = new Blob(chunks, {type: recorder.mimeType || 'video/webm'});
+      stopStream();
+      loadVideo(recordedBlob, true);
+    };
+    recorder.start(100);
+    $('recBtn').classList.add('recording'); show('recDot', true);
+    const len = +$('lenSel').value;
+    if(len) autoStopTimer = setTimeout(stopRecording, len*1000);
+  }
+  function stopRecording(){
+    clearTimeout(autoStopTimer);
+    $('recBtn').classList.remove('recording'); show('recDot', false);
+    if(recorder && recorder.state!=='inactive') recorder.stop();
+  }
+
+  $('recBtn').onclick = () => {
+    if(recorder && recorder.state==='recording'){ stopRecording(); return; }
+    if(countdownTimer){ clearInterval(countdownTimer); countdownTimer=null; show('countdown',false); return; }
+    let n = +$('delaySel').value;
+    if(!n){ beginRecording(); return; }
+    const cd = $('countdown'); cd.textContent = n; show('countdown', true);
+    countdownTimer = setInterval(() => {
+      n--;
+      if(n<=0){ clearInterval(countdownTimer); countdownTimer=null; show('countdown',false); beginRecording(); }
+      else cd.textContent = n;
+    }, 1000);
+  };
+  $('flipBtn').onclick = () => { facing = facing==='environment' ? 'user' : 'environment'; startCamera(); };
+  $('cancelCam').onclick = () => { clearInterval(countdownTimer); countdownTimer=null; show('countdown',false);
+    if(recorder && recorder.state==='recording'){ recorder.onstop=null; recorder.stop(); }
+    $('recBtn').classList.remove('recording'); show('recDot',false); stopStream(); setMode('home'); };
+
+  // ---------- load / review ----------
+  $('startCam').onclick = startCamera;
+  $('pickFile').onclick = () => $('fileInput').click();
+  $('fileInput').onchange = e => { const f=e.target.files[0]; if(f){ recordedBlob=null; loadVideo(f,false); } e.target.value=''; };
+  $('newBtn').onclick = () => { video.pause(); clearVideoSrc(); recordedBlob=null; shapes=[]; pendingAngle=null; setMode('home'); };
+
+  function clearVideoSrc(){
+    video.removeAttribute('src'); video.srcObject = null;
+    if(objectURL){ URL.revokeObjectURL(objectURL); objectURL=null; }
+  }
+
+  function loadVideo(blob, isRecording){
+    clearVideoSrc();
+    video.style.transform = (isRecording && facing==='user') ? 'scaleX(-1)' : '';
+    objectURL = URL.createObjectURL(blob);
+    video.src = objectURL;
+    video.playbackRate = +$('speedSel').value;
+    show('saveVidBtn', isRecording);
+    shapes = []; pendingAngle = null;
+    setMode('review');
+    video.onloadedmetadata = () => {
+      // Chrome's recorded webm reports Infinity duration until we seek to the end
+      if(!isFinite(video.duration)){
+        video.currentTime = 1e101;
+        video.ontimeupdate = () => { video.ontimeupdate = null; video.currentTime = 0; syncUI(); };
+      }
+      resize(); syncUI();
+      video.currentTime = 0.001; // show first frame on iOS
+    };
+  }
+
+  // playback
+  $('playBtn').onclick = () => video.paused ? video.play() : video.pause();
+  video.onplay = () => { $('playBtn').textContent = '❚❚'; loop(); };
+  video.onpause = () => { $('playBtn').textContent = '▶︎'; syncUI(); };
+  video.onended = () => { $('playBtn').textContent = '▶︎'; };
+  video.onseeked = syncUI;
+  function step(d){ video.pause(); video.currentTime = Math.max(0, Math.min((video.duration||0), video.currentTime + d)); }
+  $('backBtn').onclick = () => step(-FRAME);
+  $('fwdBtn').onclick = () => step(FRAME);
+  // hold to repeat
+  ['backBtn','fwdBtn'].forEach(id => {
+    let h; const d = id==='backBtn' ? -FRAME : FRAME;
+    $(id).addEventListener('pointerdown', () => { h = setTimeout(function rep(){ step(d); h = setTimeout(rep, 70); }, 350); });
+    ['pointerup','pointerleave','pointercancel'].forEach(ev => $(id).addEventListener(ev, () => clearTimeout(h)));
+  });
+  $('speedSel').onchange = e => video.playbackRate = +e.target.value;
+  $('scrub').oninput = e => { video.pause(); if(isFinite(video.duration)) video.currentTime = +e.target.value * video.duration; };
+
+  function syncUI(){
+    const d = video.duration;
+    if(isFinite(d) && d>0){ $('scrub').value = video.currentTime / d; }
+    $('time').textContent = `${fmt(video.currentTime)} / ${fmt(d)}`;
+  }
+  function loop(){ if(video.paused) return; syncUI(); requestAnimationFrame(loop); }
+
+  // ---------- geometry ----------
+  // Shapes are stored in video-normalized coords (0–1) so they stick to the video when resized.
+  function vRect(){
+    const cw = canvas.width, ch = canvas.height;
+    const vw = video.videoWidth || 16, vh = video.videoHeight || 9;
+    const s = Math.min(cw/vw, ch/vh), w = vw*s, h = vh*s;
+    return { x:(cw-w)/2, y:(ch-h)/2, w, h };
+  }
+  const dpr = () => window.devicePixelRatio || 1;
+  function toNorm(e){
+    const b = canvas.getBoundingClientRect(), r = vRect();
+    const px = (e.clientX - b.left) * dpr(), py = (e.clientY - b.top) * dpr();
+    return { x:(px - r.x)/r.w, y:(py - r.y)/r.h };
+  }
+  function toPx(p, r){ return { x: r.x + p.x*r.w, y: r.y + p.y*r.h }; }
+
+  function resize(){
+    const b = canvas.getBoundingClientRect();
+    canvas.width = Math.max(1, b.width * dpr()); canvas.height = Math.max(1, b.height * dpr());
+    draw();
+  }
+  window.addEventListener('resize', resize);
+  new ResizeObserver(resize).observe($('stage'));
+
+  // ---------- drawing ----------
+  function render(c, r, scale){
+    c.clearRect(0,0,c.canvas.width,c.canvas.height);
+    if(mode!=='review' && c===ctx) return;
+    const lw = 3*scale;
+    if(showGrid){
+      c.save(); c.strokeStyle='rgba(255,255,255,.28)'; c.lineWidth=1*scale;
+      for(let i=1;i<6;i++){ const x=r.x+r.w*i/6; c.beginPath(); c.moveTo(x,r.y); c.lineTo(x,r.y+r.h); c.stroke(); }
+      for(let i=1;i<8;i++){ const y=r.y+r.h*i/8; c.beginPath(); c.moveTo(r.x,y); c.lineTo(r.x+r.w,y); c.stroke(); }
+      c.restore();
+    }
+    for(const s of shapes){
+      c.save();
+      c.strokeStyle = s.color; c.fillStyle = s.color; c.lineWidth = lw; c.lineCap='round'; c.lineJoin='round';
+      c.shadowColor='rgba(0,0,0,.6)'; c.shadowBlur=4*scale;
+      const P = s.pts.map(p => toPx(p, r));
+      if(s.type==='line'){
+        line(c,P[0],P[1]);
+        const deg = Math.abs(Math.atan2(P[1].y-P[0].y, P[1].x-P[0].x) * 180/Math.PI);
+        const a = Math.min(deg, 180-deg);
+        if(dist(P[0],P[1]) > 30*scale) label(c, `${a.toFixed(0)}°`, (P[0].x+P[1].x)/2, (P[0].y+P[1].y)/2 - 14*scale, scale);
+        handles(c,P,scale);
+      } else if(s.type==='angle'){
+        line(c,P[0],P[1]); if(P[2]) line(c,P[0],P[2]);
+        if(P[2]){
+          const a1 = Math.atan2(P[1].y-P[0].y, P[1].x-P[0].x), a2 = Math.atan2(P[2].y-P[0].y, P[2].x-P[0].x);
+          let diff = a2 - a1; while(diff> Math.PI) diff-=2*Math.PI; while(diff<-Math.PI) diff+=2*Math.PI;
+          const rad = 28*scale;
+          c.lineWidth = 2*scale; c.beginPath(); c.arc(P[0].x,P[0].y,rad,a1,a1+diff,diff<0); c.stroke();
+          const mid = a1 + diff/2;
+          label(c, `${Math.abs(diff*180/Math.PI).toFixed(0)}°`, P[0].x+Math.cos(mid)*(rad+26*scale), P[0].y+Math.sin(mid)*(rad+26*scale), scale);
+        }
+        handles(c,P,scale);
+      } else if(s.type==='circle'){
+        c.beginPath(); c.arc(P[0].x,P[0].y,dist(P[0],P[1]),0,Math.PI*2); c.stroke();
+        handles(c,P,scale);
+      } else if(s.type==='free'){
+        c.beginPath(); P.forEach((p,i)=> i?c.lineTo(p.x,p.y):c.moveTo(p.x,p.y)); c.stroke();
+      }
+      c.restore();
+    }
+  }
+  function draw(){ render(ctx, vRect(), dpr()); }
+  function line(c,a,b){ c.beginPath(); c.moveTo(a.x,a.y); c.lineTo(b.x,b.y); c.stroke(); }
+  function dist(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); }
+  function handles(c,P,scale){
+    if(c!==ctx) return; // no handles in snapshots
+    c.shadowBlur=0;
+    P.forEach(p => { c.beginPath(); c.arc(p.x,p.y,5*scale,0,Math.PI*2); c.fill();
+      c.lineWidth=1.5*scale; c.strokeStyle='#000'; c.stroke(); });
+  }
+  function label(c,text,x,y,scale){
+    c.save(); c.shadowBlur=0;
+    c.font = `700 ${14*scale}px -apple-system,Segoe UI,sans-serif`;
+    const w = c.measureText(text).width + 12*scale, h = 22*scale;
+    c.fillStyle='rgba(0,0,0,.65)'; roundRect(c,x-w/2,y-h/2,w,h,6*scale); c.fill();
+    c.fillStyle='#fff'; c.textAlign='center'; c.textBaseline='middle'; c.fillText(text,x,y+1*scale);
+    c.restore();
+  }
+  function roundRect(c,x,y,w,h,r){ c.beginPath(); c.moveTo(x+r,y); c.arcTo(x+w,y,x+w,y+h,r); c.arcTo(x+w,y+h,x,y+h,r); c.arcTo(x,y+h,x,y,r); c.arcTo(x,y,x+w,y,r); c.closePath(); }
+
+  // ---------- pointer input ----------
+  function hitHandle(e){
+    const b = canvas.getBoundingClientRect(), r = vRect();
+    const px = { x:(e.clientX-b.left)*dpr(), y:(e.clientY-b.top)*dpr() };
+    const tol = 22 * dpr();
+    for(let i=shapes.length-1;i>=0;i--){
+      const s = shapes[i]; if(s.type==='free') continue;
+      for(let j=0;j<s.pts.length;j++){ if(dist(toPx(s.pts[j],r),px) < tol) return {shape:s, idx:j}; }
+    }
+    return null;
+  }
+  canvas.addEventListener('pointerdown', e => {
+    if(mode!=='review') return;
+    e.preventDefault(); canvas.setPointerCapture(e.pointerId);
+    if(!video.paused) video.pause();
+    const p = toNorm(e);
+    const hit = hitHandle(e);
+    if(hit){ drag = hit; return; }
+    if(pendingAngle){ pendingAngle.pts[2] = {...p}; drag = {shape:pendingAngle, idx:2}; pendingAngle = null; draw(); return; }
+    if(tool==='free'){ const s={type:'free',color,pts:[p]}; shapes.push(s); drag={shape:s, idx:-1}; return; }
+    const s = { type:tool, color, pts:[p, {...p}] };
+    shapes.push(s); drag = {shape:s, idx:1, fresh:true};
+    draw();
+  });
+  canvas.addEventListener('pointermove', e => {
+    if(!drag) return;
+    const p = toNorm(e);
+    if(drag.idx===-1) drag.shape.pts.push(p); else drag.shape.pts[drag.idx] = p;
+    draw();
+  });
+  const end = () => {
+    if(!drag) return;
+    const s = drag.shape, r = vRect();
+    // tap without dragging = discard tiny shape
+    if(drag.fresh && s.pts.length===2 && dist(toPx(s.pts[0],r),toPx(s.pts[1],r)) < 8*dpr()){
+      shapes.pop();
+    } else if(drag.fresh && s.type==='angle'){
+      pendingAngle = s; toast('Now drag the second arm');
+    }
+    drag = null; draw();
+  };
+  canvas.addEventListener('pointerup', end);
+  canvas.addEventListener('pointercancel', end);
+
+  // ---------- toolbar ----------
+  document.querySelectorAll('[data-tool]').forEach(b => b.onclick = () => {
+    document.querySelectorAll('[data-tool]').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on'); tool = b.dataset.tool;
+    if(pendingAngle && tool!=='angle'){ shapes = shapes.filter(s=>s!==pendingAngle); pendingAngle=null; draw(); }
+    if(tool==='angle') toast('Start at the joint, drag out one arm');
+  });
+  document.querySelectorAll('[data-color]').forEach(b => b.onclick = () => {
+    document.querySelectorAll('[data-color]').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on'); color = b.dataset.color;
+  });
+  $('undoBtn').onclick = () => { const s = shapes.pop(); if(s===pendingAngle) pendingAngle=null; draw(); };
+  $('clearBtn').onclick = () => { shapes=[]; pendingAngle=null; draw(); };
+  $('gridBtn').onclick = () => { showGrid=!showGrid; $('gridBtn').classList.toggle('on',showGrid); draw(); };
+
+  // ---------- saving (optional) ----------
+  async function deliver(blob, name){
+    const file = new File([blob], name, {type: blob.type});
+    if(navigator.canShare && navigator.canShare({files:[file]})){
+      try{ await navigator.share({files:[file]}); return; }catch(e){ if(e.name==='AbortError') return; }
+    }
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+  }
+  const stamp = () => new Date().toISOString().slice(0,16).replace(/[:T]/g,'-');
+
+  $('snapBtn').onclick = () => {
+    const vw = video.videoWidth, vh = video.videoHeight;
+    if(!vw){ toast('No frame yet'); return; }
+    const c = document.createElement('canvas'); c.width = vw; c.height = vh;
+    const x = c.getContext('2d');
+    if(video.style.transform){ x.save(); x.translate(vw,0); x.scale(-1,1); x.drawImage(video,0,0,vw,vh); x.restore(); }
+    else x.drawImage(video,0,0,vw,vh);
+    // scale strokes relative to how big the video looks on screen
+    const r = vRect(), scale = dpr() * (vw / r.w);
+    const savedMode = mode;
+    const temp = document.createElement('canvas'); temp.width=vw; temp.height=vh;
+    const tx = temp.getContext('2d');
+    render(tx, {x:0,y:0,w:vw,h:vh}, scale);
+    x.drawImage(temp,0,0);
+    c.toBlob(b => b && deliver(b, `swing-${stamp()}.png`), 'image/png');
+  };
+  $('saveVidBtn').onclick = () => {
+    if(!recordedBlob) return;
+    const ext = recordedBlob.type.includes('mp4') ? 'mp4' : 'webm';
+    deliver(recordedBlob, `swing-${stamp()}.${ext}`);
+  };
+
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    $('startCam').disabled = true; $('startCam').textContent = '🎥 Camera needs HTTPS';
+  }
+  setMode('home');
+})();
+</script>
+</body>
+</html>
