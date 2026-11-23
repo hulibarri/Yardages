@@ -258,6 +258,8 @@
     video.preload = 'auto';
     video.src = objectURL;
     video.load();
+    primed = false;
+    kick(); // must run inside the tap that picked the file, or iOS won't load the video
     show('saveVidBtn', isRecording);
     shapes = []; pendingAngle = null;
     setMode('review');
@@ -268,19 +270,27 @@
         video.ontimeupdate = () => { video.ontimeupdate = null; video.currentTime = 0; syncUI(); };
       }
       resize(); syncUI();
-      // iOS Safari won't paint a frame until the video has played once: play muted, pause right away
-      video.muted = true;
-      const p = video.play();
-      const settle = () => { video.pause(); video.playbackRate = +$('speedSel').value; seekTo(0); };
-      if(p && p.then) p.then(settle).catch(() => seekTo(0)); else settle();
     };
   }
+
+  // iOS only loads/decodes a picked video after it has played during a user tap.
+  // kick() starts a muted play inside the tap; the first 'playing' event pauses it on frame 1.
+  let primed = true;
+  function kick(){
+    video.muted = true;
+    const p = video.play(); if(p && p.catch) p.catch(()=>{});
+  }
+  video.addEventListener('playing', () => {
+    if(primed) return;
+    primed = true; video.pause(); video.playbackRate = +$('speedSel').value; seekTo(0);
+  });
+  function needsKick(){ return !primed || !isFinite(video.duration) || video.readyState < 2; }
 
   // playback
   $('playBtn').onclick = () => {
     if(!video.paused){ video.pause(); return; }
     if(video.ended || video.currentTime >= video.duration - 0.05) video.currentTime = 0;
-    video.playbackRate = +$('speedSel').value; video.play();
+    primed = true; video.playbackRate = +$('speedSel').value; video.play();
   };
   video.onplay = () => { $('playBtn').textContent = '❚❚'; loop(); };
   video.onpause = () => { $('playBtn').textContent = '▶︎'; syncUI(); };
@@ -298,7 +308,7 @@
   }
   video.onseeked = () => { clearTimeout(seekGuard); seekBusy = false; if(pendingSeek!==null) doSeek(); else syncUI(); };
   let lastT = 0;
-  function step(d){ video.pause(); const base = pendingSeek!==null ? pendingSeek : (seekBusy ? lastT : video.currentTime); seekTo(base + d); }
+  function step(d){ if(needsKick()){ kick(); return; } video.pause(); const base = pendingSeek!==null ? pendingSeek : (seekBusy ? lastT : video.currentTime); seekTo(base + d); }
   $('backBtn').onclick = () => step(-FRAME);
   $('fwdBtn').onclick = () => step(FRAME);
   // hold to repeat
@@ -313,6 +323,7 @@
   // custom scrubber
   const scrub = $('scrub');
   function scrubAt(e){
+    if(needsKick()){ kick(); return; }
     const tr = scrub.querySelector('.track').getBoundingClientRect();
     const f = Math.max(0, Math.min(1, (e.clientX - tr.left) / tr.width));
     if(isFinite(video.duration)) seekTo(f * video.duration);
