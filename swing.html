@@ -388,7 +388,11 @@
         line(c,P[0],P[1]);
         const deg = Math.abs(Math.atan2(P[1].y-P[0].y, P[1].x-P[0].x) * 180/Math.PI);
         const a = Math.min(deg, 180-deg);
-        if(dist(P[0],P[1]) > 30*scale) label(c, `${a.toFixed(0)}°`, (P[0].x+P[1].x)/2, (P[0].y+P[1].y)/2 - 14*scale, scale);
+        if(dist(P[0],P[1]) > 30*scale){
+          // label sits just above whichever end is higher on screen
+          const top = P[0].y <= P[1].y ? P[0] : P[1];
+          label(c, `${a.toFixed(0)}°`, top.x, Math.max(r.y + 14*scale, top.y - 22*scale), scale);
+        }
         handles(c,P,scale);
       } else if(s.type==='angle'){
         line(c,P[0],P[1]); if(P[2]) line(c,P[0],P[2]);
