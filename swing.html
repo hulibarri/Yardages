@@ -47,6 +47,11 @@
   .bar button{flex:0 0 auto}
   .grow{flex:1}
   .sep{width:1px;align-self:stretch;background:var(--line);flex:0 0 1px}
+  .tools{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:8px 10px 4px}
+  .tools button{display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 4px;font-size:13px;font-weight:600}
+  .tools button span{font-size:20px;line-height:1}
+  .swatches{display:flex;gap:10px;padding:0 4px}
+  button.danger{color:var(--danger)}
   .swatch{width:30px;height:30px;border-radius:50%;padding:0;border:2px solid transparent;flex:0 0 auto}
   .swatch.on{border-color:#fff;background-clip:padding-box}
   select{font:inherit;color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px}
@@ -121,19 +126,22 @@
         <span class="grow"></span>
         <span id="time">0.00 / 0.00</span>
       </div>
-      <div class="bar" id="tools">
-        <button data-tool="line" class="on">📏 Line</button>
-        <button data-tool="angle">📐 Angle</button>
-        <button data-tool="circle">⭕ Circle</button>
-        <button data-tool="free">✏️ Draw</button>
-        <span class="sep"></span>
-        <button class="swatch on" data-color="#ffe14d" style="background:#ffe14d"></button>
-        <button class="swatch" data-color="#ff4d4d" style="background:#ff4d4d"></button>
-        <button class="swatch" data-color="#4dd2ff" style="background:#4dd2ff"></button>
-        <button class="swatch" data-color="#ffffff" style="background:#ffffff"></button>
-        <span class="sep"></span>
+      <div class="tools" id="tools">
+        <button data-tool="line" class="on"><span>📏</span>Line</button>
+        <button data-tool="angle"><span>📐</span>Angle</button>
+        <button data-tool="circle"><span>⭕</span>Circle</button>
+        <button data-tool="free"><span>✏️</span>Draw</button>
+      </div>
+      <div class="bar">
+        <div class="swatches">
+          <button class="swatch on" data-color="#ffe14d" style="background:#ffe14d" aria-label="Yellow"></button>
+          <button class="swatch" data-color="#ff4d4d" style="background:#ff4d4d" aria-label="Red"></button>
+          <button class="swatch" data-color="#4dd2ff" style="background:#4dd2ff" aria-label="Blue"></button>
+          <button class="swatch" data-color="#ffffff" style="background:#ffffff" aria-label="White"></button>
+        </div>
+        <span class="grow"></span>
         <button id="undoBtn">↶ Undo</button>
-        <button id="clearBtn">Clear</button>
+        <button id="clearBtn" class="danger">Clear</button>
       </div>
       <div class="bar">
         <button id="snapBtn">📸 Save frame</button>
